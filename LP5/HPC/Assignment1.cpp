@@ -1,186 +1,199 @@
-#include <iostream>
-#include <vector>
-#include <queue>
+#include <bits/stdc++.h>
 #include <omp.h>
-#include <chrono>
-
 using namespace std;
-using namespace std::chrono;
 
-// ------------------- SEQUENTIAL TRAVERSALS -------------------
+class Graph {
+    int v;
+    vector<vector<int>> adj;
 
-void sequential_bfs(int start, const vector<vector<int>>& graph, bool print_nodes = false) {
-    int n = graph.size();
-    vector<int> visited(n, 0);
-    queue<int> q;
+public:
+    Graph(int v)
+    {
+        this->v = v;
+        adj.resize(v);
+    }
 
-    q.push(start);
-    visited[start] = 1;
+    void addEdge(int u, int v)
+    {
+        adj[u].push_back(v);
+        adj[v].push_back(u);
+    }
 
-    while (!q.empty()) {
-        int u = q.front();
-        q.pop();
+    void dfs(int node) 
+    {
+        vector<int> visited(v, false);
+        dfsUtil(node, visited);
+    }
 
-        if (print_nodes) cout << u << " ";
+    void dfsParallel(int node)
+    {
+        vector<int> visited(v, 0);
+        visited[node] = 1;
 
-        for (int v : graph[u]) {
-            if (!visited[v]) {
-                visited[v] = 1;
-                q.push(v);
+        #pragma omp parallel
+        {
+            #pragma omp single
+            {
+                #pragma omp task shared(visited)
+                dfsUtilParallel(node, visited);
             }
         }
     }
-    if (print_nodes) cout << endl;
-}
 
-void sequential_dfs_util(int u, const vector<vector<int>>& graph, vector<int>& visited, bool print_nodes) {
-    visited[u] = 1;
-    if (print_nodes) cout << u << " ";
+    void bfs(int node)
+    {
+        vector<int> visited(v, 0);
+        bfsUtil(node, visited);
+    }
 
-    for (int v : graph[u]) {
-        if (!visited[v]) {
-            sequential_dfs_util(v, graph, visited, print_nodes);
+    void bfsParallel(int node) 
+    {
+        vector<int> visited(v, 0);
+        bfsUtilParallel(node, visited);
+    }
+
+private:
+    void dfsUtil(int node, vector<int>& visited)
+    {
+        visited[node] = 1;
+
+        for (auto nbr: adj[node])
+        {
+            if (!visited[nbr])
+            {
+                visited[nbr] = 1;
+                dfsUtil(nbr, visited);
+            }
         }
     }
-}
 
-void sequential_dfs(int start, const vector<vector<int>>& graph, bool print_nodes = false) {
-    int n = graph.size();
-    vector<int> visited(n, 0);
-    sequential_dfs_util(start, graph, visited, print_nodes);
-    if (print_nodes) cout << endl;
-}
+    void dfsUtilParallel(int node, vector<int>& visited)
+    {
+        for (auto nbr : adj[node])
+        {
+            if (!visited[nbr])
+            {
+                bool spawn_task = false;    
 
-
-// ------------------- PARALLEL TRAVERSALS -------------------
-
-void parallel_bfs(int start, const vector<vector<int>>& graph, bool print_nodes = false) {
-    int n = graph.size();
-    vector<int> visited(n, 0);
-    vector<int> current_level;
-
-    current_level.push_back(start);
-    visited[start] = 1;
-
-    while (!current_level.empty()) {
-        vector<int> next_level;
-
-        #pragma omp parallel for
-        for (int i = 0; i < current_level.size(); ++i) {
-            int u = current_level[i];
-            
-            if (print_nodes) {
                 #pragma omp critical
                 {
-                    cout << u << " ";
+                    if (!visited[nbr])
+                    {
+                        visited[nbr] = 1;
+                        spawn_task = true;
+                    }
+                }
+
+                if (spawn_task)
+                {
+                    #pragma omp task shared(visited)
+                    dfsUtilParallel(nbr, visited);
                 }
             }
+        }
 
-            for (int v : graph[u]) {
-                if (visited[v] == 0) {
-                    // Atomic compare and swap to avoid critical section bottleneck and vector<bool> races
-                    if (__sync_bool_compare_and_swap(&visited[v], 0, 1)) {
+        #pragma omp taskwait
+    }
+
+    void bfsUtil(int node, vector<int>& visited)
+    {
+        queue<int> q;
+        q.push(node);
+        visited[node] = 1;
+
+        while(!q.empty())
+        {
+            auto front = q.front();
+            q.pop();
+
+            for (auto &nbr : adj[front])
+            {
+                if (!visited[nbr])
+                {
+                    visited[nbr] = 1;
+                    q.push(nbr);
+                }
+            }
+        }
+    }
+
+    void bfsUtilParallel(int node, vector<int>& visited) 
+    {
+        vector<int> current;
+        current.push_back(node);
+        visited[node] = 1;
+
+        while(!current.empty())
+        {
+            vector<int> next;
+
+            #pragma omp parallel for
+            for (int i = 0; i < current.size(); i++)
+            {
+                int node = current[i];
+
+                for (int nbr : adj[node])
+                {
+                    if (!visited[nbr])
+                    {
                         #pragma omp critical
                         {
-                            next_level.push_back(v);
+                            if (!visited[nbr])
+                            {
+                                visited[nbr] = 1;
+                                next.push_back(nbr);
+                            }
                         }
                     }
                 }
             }
-        }
-        current_level = next_level;
-    }
-    if (print_nodes) cout << endl;
-}
 
-void parallel_dfs_util(int u, const vector<vector<int>>& graph, vector<int>& visited, bool print_nodes) {
-    if (print_nodes) {
-        #pragma omp critical
+            current = next;
+        }
+    }
+};
+
+int main()
+{
+    int v = 20000;
+    Graph *obj = new Graph(v);
+
+    srand(42);
+
+    for (int i = 0; i < v; i++)
+    {
+        for (int j = 0; j < 150; j++)
         {
-            cout << u << " ";
-        }
-    }
-
-    for (int v : graph[u]) {
-        if (visited[v] == 0) {
-            // Atomic compare and swap replaces the massive critical section
-            if (__sync_bool_compare_and_swap(&visited[v], 0, 1)) {
-                #pragma omp task shared(graph, visited) firstprivate(v, print_nodes)
-                parallel_dfs_util(v, graph, visited, print_nodes);
+            int nbr = rand() % v;
+            if (nbr != i)
+            {
+                obj->addEdge(i, nbr);
             }
         }
     }
-}
 
-void parallel_dfs(int start, const vector<vector<int>>& graph, bool print_nodes = false) {
-    int n = graph.size();
-    vector<int> visited(n, 0);
-    visited[start] = 1;
+    double t1, t2;
+    t1 = omp_get_wtime();
+    obj->dfsParallel(0);
+    t2 = omp_get_wtime();  
+    cout << "Time taken by parallel DFS: " << t2 - t1 << " seconds" << endl;
 
-    #pragma omp parallel
-    {
-        #pragma omp single
-        {
-            parallel_dfs_util(start, graph, visited, print_nodes);
-        }
-    }
-    if (print_nodes) cout << endl;
-}
+    t1 = omp_get_wtime();
+    obj->bfsParallel(0);
+    t2 = omp_get_wtime();
+    cout << "Time taken by parallel BFS: " << t2 - t1 << " seconds" << endl;
 
-// ------------------- UTILS & MAIN -------------------
+    t1 = omp_get_wtime();
+    obj->dfs(0);
+    t2 = omp_get_wtime();
+    cout << "Time taken by sequential DFS: " << t2 - t1 << " seconds" << endl;
 
-// Helper to measure execution time
-auto measure = [](string name, auto func) {
-    auto start_time = high_resolution_clock::now();
-    func();
-    auto end_time = high_resolution_clock::now();
-    cout << name << ": " << duration_cast<milliseconds>(end_time - start_time).count() << " ms" << endl;
-};
+    t1 = omp_get_wtime();
+    obj->bfs(0);
+    t2 = omp_get_wtime();
+    cout << "Time taken by sequential BFS: " << t2 - t1 << " seconds" << endl;
 
-int main() {
-    // 1. SMALL GRAPH (To verify correctness with printing)
-    cout << "=== Verification on Small Graph ===" << endl;
-    int n_small = 7;
-    vector<vector<int>> small_graph(n_small);
-    small_graph[0] = {1, 2};
-    small_graph[1] = {0, 3, 4};
-    small_graph[2] = {0, 5, 6};
-    small_graph[3] = {1};
-    small_graph[4] = {1};
-    small_graph[5] = {2};
-    small_graph[6] = {2};
-
-    cout << "Sequential BFS: "; sequential_bfs(0, small_graph, true);
-    cout << "Parallel BFS:   "; parallel_bfs(0, small_graph, true);
-    cout << "Sequential DFS: "; sequential_dfs(0, small_graph, true);
-    cout << "Parallel DFS:   "; parallel_dfs(0, small_graph, true);
-    
-    // 2. LARGE GRAPH (To compare performance)
-    cout << "\n=== Performance Comparison on Large Graph ===" << endl;
-    int n_large = 9000000;
-    vector<vector<int>> large_graph(n_large);
-    
-    // Create a large binary tree graph
-    for (int i = 0; i < n_large; ++i) {
-        int left = 2 * i + 1;
-        int right = 2 * i + 2;
-        if (left < n_large) {
-            large_graph[i].push_back(left);
-            large_graph[left].push_back(i);
-        }
-        if (right < n_large) {
-            large_graph[i].push_back(right);
-            large_graph[right].push_back(i);
-        }
-    }
-    
-    cout << "Graph size: " << n_large << " nodes" << endl;
-
-    measure("Sequential BFS", [&](){ sequential_bfs(0, large_graph, false); });
-    measure("Parallel BFS  ", [&](){ parallel_bfs(0, large_graph, false); });
-    
-    measure("Sequential DFS", [&](){ sequential_dfs(0, large_graph, false); });
-    measure("Parallel DFS  ", [&](){ parallel_dfs(0, large_graph, false); });
+    // cout <<  _OPENMP << endl;
 
     return 0;
 }

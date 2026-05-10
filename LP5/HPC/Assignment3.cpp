@@ -1,80 +1,121 @@
-#include <iostream>
-#include <vector>
+#include <bits/stdc++.h>
 #include <omp.h>
-#include <chrono>
-#include <climits>
-#include <algorithm>
-
 using namespace std;
-using namespace std::chrono;
 
-int main() {
-    // Number of elements in the array
-    int n = 900000000; // 10 million
-    vector<int> arr(n);
-    
-    // Generate random data
-    generate(arr.begin(), arr.end(), []() { return rand() % 100000; });
+void min_seq(vector<int> &arr)
+{
+    int mini = INT_MAX;
+    int n = arr.size();
 
-    // === Sequential Execution ===
-    int seq_min_val = arr[0];
-    int seq_max_val = arr[0];
-    long long seq_sum = 0;
-
-    auto start_seq = high_resolution_clock::now();
-
-    for (int i = 0; i < n; ++i) {
-        if (arr[i] < seq_min_val) seq_min_val = arr[i];
-        if (arr[i] > seq_max_val) seq_max_val = arr[i];
-        seq_sum += arr[i];
+    for (int i = 0; i < n; i++)
+    {
+        if (arr[i] < mini)
+            mini = arr[i];
     }
-    double seq_average = static_cast<double>(seq_sum) / n;
+}
 
-    auto stop_seq = high_resolution_clock::now();
-    auto duration_seq = duration_cast<milliseconds>(stop_seq - start_seq);
+void min_par(vector<int> &arr)
+{
+    int mini = INT_MAX;
+    int n = arr.size();
 
-    // === Parallel Execution ===
-    int min_val = arr[0];
-    int max_val = arr[0];
+#pragma omp parallel for reduction(min : mini)
+    for (int i = 0; i < n; i++)
+    {
+        if (arr[i] < mini)
+            mini = arr[i];
+    }
+}
+
+void max_seq(vector<int> &arr)
+{
+    int maxi = INT_MIN;
+    int n = arr.size();
+
+    for (int i = 0; i < n; i++)
+    {
+        if (arr[i] > maxi)
+            maxi = arr[i];
+    }
+}
+
+void max_par(vector<int> &arr)
+{
+    int maxi = INT_MIN;
+    int n = arr.size();
+
+#pragma omp parallel for reduction(max : maxi)
+    for (int i = 0; i < n; i++)
+    {
+        if (arr[i] > maxi)
+            maxi = arr[i];
+    }
+}
+
+long long sum_seq(vector<int> &arr)
+{
     long long sum = 0;
+    int n = arr.size();
 
-    auto start = high_resolution_clock::now();
-
-    // Parallel Reduction for Min, Max, and Sum in a single pass
-    #pragma omp parallel for reduction(min:min_val) reduction(max:max_val) reduction(+:sum)
-    for (int i = 0; i < n; ++i) {
-        if (arr[i] < min_val) min_val = arr[i];
-        if (arr[i] > max_val) max_val = arr[i];
+    for (int i = 0; i < n; i++)
+    {
         sum += arr[i];
     }
 
-    // Average is simply sum divided by number of elements
-    double average = static_cast<double>(sum) / n;
+    return sum;
+}
 
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<milliseconds>(stop - start);
+long long sum_par(vector<int> &arr)
+{
+    long long sum = 0;
+    int n = arr.size();
 
-    cout << "=== Array Size: " << n << " elements ===\n\n";
-
-    cout << "=== Sequential Reduction Results ===\n";
-    cout << "Min:        " << seq_min_val << "\n";
-    cout << "Max:        " << seq_max_val << "\n";
-    cout << "Sum:        " << seq_sum << "\n";
-    cout << "Average:    " << seq_average << "\n";
-    cout << "Time Taken: " << duration_seq.count() << " ms\n\n";
-
-    cout << "=== Parallel Reduction Results ===\n";
-    cout << "Min:        " << min_val << "\n";
-    cout << "Max:        " << max_val << "\n";
-    cout << "Sum:        " << sum << "\n";
-    cout << "Average:    " << average << "\n";
-    cout << "Time Taken: " << duration.count() << " ms\n\n";
-
-    if (duration.count() > 0) {
-        cout << "Speedup:    " << static_cast<double>(duration_seq.count()) / duration.count() << "x\n";
-    } else {
-        cout << "Speedup:    N/A (Parallel execution took < 1 ms)\n";
+#pragma omp parallel for reduction(+ : sum)
+    for (int i = 0; i < n; i++)
+    {
+        sum += arr[i];
     }
 
-    return 0;
+    return sum;
+}
+
+int main()
+{
+    int n = 1e7;
+    vector<int> arr(n);
+
+    for (int i = 0; i < n; i++)
+        arr[i] = rand() % 100000;
+
+    double t1, t2;
+
+    t1 = omp_get_wtime();
+    min_seq(arr);
+    t2 = omp_get_wtime();
+    cout << "Time taken by sequential min: " << t2 - t1 << " seconds" << endl;
+
+    t1 = omp_get_wtime();
+    min_par(arr);
+    t2 = omp_get_wtime();
+    cout << "Time taken by parallel min: " << t2 - t1 << " seconds" << endl;
+
+    t1 = omp_get_wtime();
+    max_seq(arr);
+    t2 = omp_get_wtime();
+    cout << "Time taken by sequential max: " << t2 - t1 << " seconds" << endl;
+
+    t1 = omp_get_wtime();
+    max_par(arr);
+    t2 = omp_get_wtime();
+    cout << "Time taken by parallel max: " << t2 - t1 << " seconds" << endl;
+
+    t1 = omp_get_wtime();
+    sum_seq(arr);
+    t2 = omp_get_wtime();
+    cout << "Time taken by sequential sum: " << t2 - t1 << " seconds" << endl;
+
+    t1 = omp_get_wtime();
+    sum_par(arr);
+    t2 = omp_get_wtime();
+    cout << "Time taken by parallel sum: " << t2 - t1 << " seconds" << endl;
 }
