@@ -142,11 +142,6 @@ int main() {
     cout << "=== Verification on Small Graph ===" << endl;
     int n_small = 7;
     vector<vector<int>> small_graph(n_small);
-    //          0
-    //        /   \
-    //       1     2
-    //      / \   / \
-    //     3   4 5   6
     small_graph[0] = {1, 2};
     small_graph[1] = {0, 3, 4};
     small_graph[2] = {0, 5, 6};
