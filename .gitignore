@@ -1,1 +1,8 @@
 .class
+# Large datasets
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Notebook cache
+*.ipynb_checkpoints
